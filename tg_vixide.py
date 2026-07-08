@@ -13,6 +13,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 
 from telethon import TelegramClient, functions
 from telethon.tl import types
+from telethon.sessions import StringSession
 
 # ===== ПЕРЕМЕННЫЕ =====
 BOT_TOKEN = "8257020137:AAFng7pgAacxilMkxGYH8CVO6-yHlQmt3K0"
@@ -21,6 +22,9 @@ ADMIN_USERNAME = "nihers"
 
 TELETHON_API_ID = 32199693
 TELETHON_API_HASH = "0f27e89d40cd2a025f98b24bc676c943"
+
+# Берем STRING_SESSION из переменных Railway
+STRING_SESSION = os.environ.get("STRING_SESSION", "1ApWapzMBu408VIrAysGQCE56NXr_KOX2HvjoTUy-hgJbWMDvjGWUT_wSfzzyVV-ofd_8Gw_LgEW3CXPBCw4g9FxPT9pA22Kez6F6e3yY1HXEniw-uBQ-Ga4PddpYcNLrlsIiTt6kV9sajIg3sm2fqtfx4uUjj0b2W_OzX76jRB8bSA2g1TbHoQoLvK5kYMYja0EUZ9MLm58MdMHjis04GWHXLiaHI9ncmKnTPwco77nszDc8uvH6AQKXRADPO30HOXlsd-dHF6x108KmKNgqVZaUJFdiLIwTcjQrthkP1Esm56hly1uGPQI185qTjSBC1-9gPWKjmp98iiKjuEW6zHQUfM_bOvM=")
 # ======================
 
 ROSE_GIFT_ID = 5168103777563050263
@@ -55,6 +59,7 @@ def db_init():
             )
         """)
         con.commit()
+    log.info("📊 База данных инициализирована")
 
 
 def db_bump(user_id: int, username: str, field: str, amount: int = 1):
@@ -258,8 +263,12 @@ async def main():
     global telethon_client
     db_init()
     
-    log.info("📱 Подключаем Telethon...")
-    telethon_client = TelegramClient("gift_session", TELETHON_API_ID, TELETHON_API_HASH)
+    if not STRING_SESSION:
+        log.error("❌ STRING_SESSION не найдена! Добавь переменную на Railway")
+        return
+    
+    log.info("📱 Подключаем Telethon через StringSession...")
+    telethon_client = TelegramClient(StringSession(STRING_SESSION), TELETHON_API_ID, TELETHON_API_HASH)
     await telethon_client.start()
     log.info("✅ Telethon подключен!")
     
