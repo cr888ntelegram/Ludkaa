@@ -23,7 +23,6 @@ ADMIN_USERNAME = "nihers"
 TELETHON_API_ID = 32199693
 TELETHON_API_HASH = "0f27e89d40cd2a025f98b24bc676c943"
 
-# Берем STRING_SESSION из переменных Railway
 STRING_SESSION = os.environ.get("STRING_SESSION", "1ApWapzMBu408VIrAysGQCE56NXr_KOX2HvjoTUy-hgJbWMDvjGWUT_wSfzzyVV-ofd_8Gw_LgEW3CXPBCw4g9FxPT9pA22Kez6F6e3yY1HXEniw-uBQ-Ga4PddpYcNLrlsIiTt6kV9sajIg3sm2fqtfx4uUjj0b2W_OzX76jRB8bSA2g1TbHoQoLvK5kYMYja0EUZ9MLm58MdMHjis04GWHXLiaHI9ncmKnTPwco77nszDc8uvH6AQKXRADPO30HOXlsd-dHF6x108KmKNgqVZaUJFdiLIwTcjQrthkP1Esm56hly1uGPQI185qTjSBC1-9gPWKjmp98iiKjuEW6zHQUfM_bOvM=")
 # ======================
 
@@ -176,7 +175,7 @@ async def handle_slot(message: Message):
     if sevens == 3:
         db_bump(user.id, username, "jackpots")
         await message.reply(
-            f"🎰 ДЖЕКПОТ!\n\n🎉 {username} сорвал банк!\n\n👇 Выбери слот:",
+            f"🎰 ДЖЕКПОТ!\n\n🎉 {username} сорвал банк!\n\n👇 Выбери слот:\nЗа одним из них спрятана 🐸 NFT\nОстальные — 🌹 розы!",
             reply_markup=build_prize_grid_hidden(user.id, message.message_id)
         )
     elif sevens == 2:
@@ -200,25 +199,38 @@ async def handle_prize_select(callback: CallbackQuery):
     username = f"@{user.username}" if user.username else user.full_name
     
     if selected_index == frog_index:
+        # Нашел NFT
         await callback.message.edit_text(
-            f"🐸 NFT НАЙДЕН!\n\n{username} нашел NFT!\n@{ADMIN_USERNAME} выдаст вручную",
+            f"🐸 NFT НАЙДЕН!\n\n{username} нашел 🐸 NFT!\n\n@{ADMIN_USERNAME} выдаст вручную",
             reply_markup=build_prize_grid_revealed(winner_id, message_id, selected_index)
         )
         await callback.answer("🐸 NFT!", show_alert=True)
-        await bot.send_message(ADMIN_ID, f"🎉 Игрок {username} нашел NFT!")
+        await bot.send_message(ADMIN_ID, f"🎉 Игрок {username} нашел NFT! Выдай вручную!")
     else:
+        # Нашел розу
         db_bump(user.id, username, "roses_won")
+        
         await callback.message.edit_text(
-            f"🌹 РОЗА!\n\n{username} нашел розу!\n⏳ Отправляем...",
+            f"🌹 РОЗА!\n\n{username} нашел 🌹 розу!\n⏳ Отправляем...",
             reply_markup=build_prize_grid_revealed(winner_id, message_id, selected_index)
         )
 
         sent = await send_rose(user.username)
+        
         if sent:
-            await callback.message.edit_text(f"🌹 Подарок отправлен! {username}, проверь подарки! 🎁")
+            await callback.message.edit_text(
+                f"🌹 Подарок отправлен!\n\n{username}, ты нашел розу!\nПроверь свои подарки в Telegram! 🎁",
+                reply_markup=build_prize_grid_revealed(winner_id, message_id, selected_index)
+            )
         else:
-            await callback.message.edit_text(f"🌹 Роза найдена!\n\n{username}, не удалось отправить автоматически\n@{ADMIN_USERNAME} выдаст вручную")
-            await bot.send_message(ADMIN_ID, f"❌ Не смог отправить розу\nПользователь: {username} (id {user.id})")
+            await callback.message.edit_text(
+                f"🌹 Роза найдена!\n\n{username} нашел розу!\n\n❌ Не удалось отправить автоматически\n@{ADMIN_USERNAME} выдаст подарок вручную",
+                reply_markup=build_prize_grid_revealed(winner_id, message_id, selected_index)
+            )
+            await bot.send_message(
+                ADMIN_ID,
+                f"❌ Не смог отправить розу\nПользователь: {username} (id {user.id})\nВыдай вручную!"
+            )
 
         await callback.answer("🌹 Роза!", show_alert=True)
 
