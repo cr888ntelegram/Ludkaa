@@ -138,37 +138,22 @@ def build_prize_grid_revealed(winner_user_id: int, message_id: int, selected_ind
 async def send_rose(username: str) -> bool:
     try:
         peer = await telethon_client.get_input_entity(username)
-        
-        # Способ 1: Через messages.SendGiftRequest
-        result = await telethon_client(functions.messages.SendGiftRequest(
+        invoice = types.InputInvoiceStarGift(
             peer=peer,
             gift_id=ROSE_GIFT_ID,
-            message=GIFT_COMMENT if GIFT_COMMENT else None,
-            hide_name=False
+            hide_name=False,
+            message=types.TextWithEntities(text=GIFT_COMMENT, entities=[]) if GIFT_COMMENT else None
+        )
+        form = await telethon_client(functions.payments.GetPaymentFormRequest(invoice=invoice))
+        await telethon_client(functions.payments.SendStarsFormRequest(
+            form_id=form.form_id,
+            invoice=invoice
         ))
         log.info(f"✅ Роза отправлена {username}")
         return True
     except Exception as e:
-        log.error(f"Способ 1 ошибка: {e}")
-        
-        # Способ 2: Через payments
-        try:
-            from telethon.tl.functions.payments import SendStarsFormRequest, GetPaymentFormRequest
-            from telethon.tl.types import InputInvoiceStarGift
-            
-            invoice = InputInvoiceStarGift(
-                peer=peer,
-                gift_id=ROSE_GIFT_ID,
-                hide_name=False,
-                message=GIFT_COMMENT if GIFT_COMMENT else None
-            )
-            form = await telethon_client(GetPaymentFormRequest(invoice=invoice))
-            await telethon_client(SendStarsFormRequest(form_id=form.form_id, invoice=invoice))
-            log.info(f"✅ Роза отправлена {username} (способ 2)")
-            return True
-        except Exception as e2:
-            log.error(f"Способ 2 ошибка: {e2}")
-            return False
+        log.error(f"Ошибка: {e}")
+        return False
 
 
 @dp.message(F.dice, F.dice.emoji == SLOT_EMOJI)
@@ -220,7 +205,7 @@ async def handle_prize_select(callback: CallbackQuery):
             reply_markup=build_prize_grid_revealed(winner_id, message_id, selected_index)
         )
         await callback.answer("🐸 NFT!", show_alert=True)
-        await bot.send_message(ADMIN_ID, f"🎉 Игрок {username} нашел NFT!")
+        await bot.send_message(ADMIN_ID, f"🎉 Игрок {username} нашел NFT! Выдай вручную!")
     else:
         db_bump(user.id, username, "roses_won")
         await callback.message.edit_text(
