@@ -24,7 +24,7 @@ TELETHON_API_ID = 32199693
 TELETHON_API_HASH = "0f27e89d40cd2a025f98b24bc676c943"
 
 # Берем STRING_SESSION из переменных Railway
-STRING_SESSION = os.environ.get("STRING_SESSION", "1ApWapzMBu408VIrAysGQCE56NXr_KOX2HvjoTUy-hgJbWMDvjGWUT_wSfzzyVV-ofd_8Gw_LgEW3CXPBCw4g9FxPT9pA22Kez6F6e3yY1HXEniw-uBQ-Ga4PddpYcNLrlsIiTt6kV9sajIg3sm2fqtfx4uUjj0b2W_OzX76jRB8bSA2g1TbHoQoLvK5kYMYja0EUZ9MLm58MdMHjis04GWHXLiaHI9ncmKnTPwco77nszDc8uvH6AQKXRADPO30HOXlsd-dHF6x108KmKNgqVZaUJFdiLIwTcjQrthkP1Esm56hly1uGPQI185qTjSBC1-9gPWKjmp98iiKjuEW6zHQUfM_bOvM=")
+STRING_SESSION = os.environ.get("1ApWapzMBu408VIrAysGQCE56NXr_KOX2HvjoTUy-hgJbWMDvjGWUT_wSfzzyVV-ofd_8Gw_LgEW3CXPBCw4g9FxPT9pA22Kez6F6e3yY1HXEniw-uBQ-Ga4PddpYcNLrlsIiTt6kV9sajIg3sm2fqtfx4uUjj0b2W_OzX76jRB8bSA2g1TbHoQoLvK5kYMYja0EUZ9MLm58MdMHjis04GWHXLiaHI9ncmKnTPwco77nszDc8uvH6AQKXRADPO30HOXlsd-dHF6x108KmKNgqVZaUJFdiLIwTcjQrthkP1Esm56hly1uGPQI185qTjSBC1-9gPWKjmp98iiKjuEW6zHQUfM_bOvM=", "")
 # ======================
 
 ROSE_GIFT_ID = 5168103777563050263
@@ -205,7 +205,7 @@ async def handle_prize_select(callback: CallbackQuery):
             reply_markup=build_prize_grid_revealed(winner_id, message_id, selected_index)
         )
         await callback.answer("🐸 NFT!", show_alert=True)
-        await bot.send_message(ADMIN_ID, f"🎉 Игрок {username} нашел NFT! Выдай вручную!")
+        await bot.send_message(ADMIN_ID, f"🎉 Игрок {username} нашел NFT!")
     else:
         db_bump(user.id, username, "roses_won")
         await callback.message.edit_text(
