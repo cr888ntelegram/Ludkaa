@@ -141,23 +141,45 @@ def build_prize_grid_revealed(winner_user_id: int, message_id: int, selected_ind
 
 
 async def send_rose(username: str) -> bool:
+    """Отправка розы через Telegram API"""
     try:
-        # Используем бота для отправки подарка (через бот-токен)
-        peer = await telethon_client.get_input_entity(username)
-        invoice = types.InputInvoiceStarGift(
-            peer=peer,
-            gift_id=ROSE_GIFT_ID,
-            hide_name=False,
-            message=types.TextWithEntities(text=GIFT_COMMENT, entities=[]) if GIFT_COMMENT else None
-        )
-        form = await telethon_client(functions.payments.GetPaymentFormRequest(invoice=invoice))
-        await telethon_client(functions.payments.SendStarsFormRequest(
-            form_id=form.form_id,
-            invoice=invoice
-        ))
-        return True
+        # Получаем ID пользователя по username
+        user = await telethon_client.get_entity(username)
+        user_id = user.id
+        
+        # Используем метод send_star_gift через функцию
+        # Пробуем разные способы отправки
+        try:
+            # Способ 1: Через messages.SendStarGift
+            result = await telethon_client(functions.messages.SendStarGiftRequest(
+                peer=user_id,
+                gift_id=ROSE_GIFT_ID,
+                hide_name=False,
+                message=GIFT_COMMENT if GIFT_COMMENT else None
+            ))
+            return True
+        except Exception as e1:
+            log.error(f"Способ 1 не работает: {e1}")
+            
+            try:
+                # Способ 2: Через payments.SendStarsForm
+                invoice = types.InputInvoiceStarGift(
+                    peer=user_id,
+                    gift_id=ROSE_GIFT_ID,
+                    hide_name=False,
+                )
+                form = await telethon_client(functions.payments.GetPaymentFormRequest(invoice=invoice))
+                await telethon_client(functions.payments.SendStarsFormRequest(
+                    form_id=form.form_id,
+                    invoice=invoice
+                ))
+                return True
+            except Exception as e2:
+                log.error(f"Способ 2 не работает: {e2}")
+                return False
+                
     except Exception as e:
-        log.error(f"ошибка отправки розы: {e}")
+        log.error(f"Ошибка отправки розы: {e}")
         return False
 
 
@@ -324,14 +346,10 @@ async def main():
     # Подключение Telethon с бот-токеном
     log.info("📱 Подключение Telethon через бот-токен...")
     
-    # Создаем клиент с бот-токеном (используем StringSession)
     telethon_client = TelegramClient(StringSession(), TELETHON_API_ID, TELETHON_API_HASH)
-    
-    # Подключаемся с бот-токеном
     await telethon_client.start(bot_token=BOT_TOKEN)
     log.info("✅ Telethon подключен как бот")
     
-    # Запуск бота
     log.info("🤖 Бот запущен и работает в группе @ludkanihers")
     await dp.start_polling(bot)
 
