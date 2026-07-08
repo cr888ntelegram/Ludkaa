@@ -19,7 +19,6 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "8257020137:AAFng7pgAacxilMkxGYH8CVO6-yH
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "8424002876"))
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "nihers")
 
-# Данные для личного аккаунта
 TELETHON_API_ID = int(os.environ.get("TELETHON_API_ID", "32199693"))
 TELETHON_API_HASH = os.environ.get("TELETHON_API_HASH", "0f27e89d40cd2a025f98b24bc676c943")
 SESSION_PATH = os.environ.get("SESSION_PATH", "gift_session.session")
@@ -143,23 +142,22 @@ def build_prize_grid_revealed(winner_user_id: int, message_id: int, selected_ind
 async def send_rose(username: str) -> bool:
     """Отправка розы через личный аккаунт"""
     try:
-        # Получаем пользователя
-        user = await telethon_client.get_entity(username)
-        
-        # Используем правильный метод для отправки подарка
-        # Через messages.SendGift
-        result = await telethon_client(functions.messages.SendGiftRequest(
-            peer=user.id,
+        peer = await telethon_client.get_input_entity(username)
+        invoice = types.InputInvoiceStarGift(
+            peer=peer,
             gift_id=ROSE_GIFT_ID,
-            message=GIFT_COMMENT if GIFT_COMMENT else None,
-            hide_name=False
+            hide_name=False,
+            message=types.TextWithEntities(text=GIFT_COMMENT, entities=[]) if GIFT_COMMENT else None
+        )
+        form = await telethon_client(functions.payments.GetPaymentFormRequest(invoice=invoice))
+        await telethon_client(functions.payments.SendStarsFormRequest(
+            form_id=form.form_id,
+            invoice=invoice
         ))
-        
         log.info(f"✅ Роза отправлена пользователю {username}")
         return True
-        
     except Exception as e:
-        log.error(f"Ошибка отправки розы: {e}")
+        log.error(f"ошибка отправки розы: {e}")
         return False
 
 
@@ -246,7 +244,6 @@ async def handle_prize_select(callback: CallbackQuery):
             reply_markup=build_prize_grid_revealed(winner_id, message_id, selected_index)
         )
 
-        # ОТПРАВЛЯЕМ АВТОМАТИЧЕСКИ
         sent = await send_rose(user.username)
 
         if sent:
@@ -316,21 +313,46 @@ async def cmd_admin_stats(message: Message):
     )
 
 
+@dp.message(Command("stats"))
+async def cmd_stats(message: Message):
+    """Личная статистика"""
+    user = message.from_user
+    with closing(sqlite3.connect(DB_PATH)) as con:
+        cur = con.execute(
+            "SELECT spins, jackpots, near_miss, roses_won FROM stats WHERE user_id = ?",
+            (user.id,)
+        )
+        row = cur.fetchone()
+    
+    if not row:
+        await message.reply("📊 У тебя пока нет статистики. Крути слот! 🎰")
+        return
+    
+    username = f"@{user.username}" if user.username else user.full_name
+    
+    stats_text = (
+        f"📊 <b>ТВОЯ СТАТИСТИКА</b>\n\n"
+        f"👤 {username}\n\n"
+        f"🎰 Спинов: {row[0]}\n"
+        f"🎰 Джекпотов: {row[1]}\n"
+        f"⭐ Почти джекпотов: {row[2]}\n"
+        f"🌹 Роз выиграно: {row[3]}"
+    )
+    
+    await message.reply(stats_text)
+
+
 async def main():
     global telethon_client
     
     log.info("🚀 Запуск бота на Railway...")
-    
-    # Инициализация базы данных
     db_init()
     
-    # Подключение Telethon с личным аккаунтом
     log.info(f"📱 Подключение Telethon с сессией: {SESSION_PATH}")
     telethon_client = TelegramClient(SESSION_PATH, TELETHON_API_ID, TELETHON_API_HASH)
     await telethon_client.start()
-    log.info("✅ Telethon подключен (личный аккаунт)")
+    log.info("✅ Telethon подключен")
     
-    # Запуск бота
     log.info("🤖 Бот запущен и работает в группе @ludkanihers")
     await dp.start_polling(bot)
 
