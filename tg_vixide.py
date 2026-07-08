@@ -258,12 +258,7 @@ async def main():
     global telethon_client
     db_init()
     
-    # Удаляем старую сессию если есть
-    if os.path.exists("gift_session.session"):
-        os.remove("gift_session.session")
-        log.info("🗑️ Старая сессия удалена")
-    
-    log.info("📱 Создаем новую сессию Telethon...")
+    log.info("📱 Подключаем Telethon...")
     telethon_client = TelegramClient("gift_session", TELETHON_API_ID, TELETHON_API_HASH)
     await telethon_client.start()
     log.info("✅ Telethon подключен!")
