@@ -13,16 +13,18 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 
 from telethon import TelegramClient, functions
 from telethon.tl import types
-from telethon.sessions import StringSession
+from telethon.tl.functions.payments import SendStarsFormRequest, GetPaymentFormRequest
+from telethon.tl.types import InputInvoiceStarGift
 
 # ===== ПЕРЕМЕННЫЕ ДЛЯ RAILWAY =====
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8257020137:AAFng7pgAacxilMkxGYH8CVO6-yHlQmt3K0")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "8424002876"))
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "nihers")
 
-# Для Telethon используем тот же токен (бот)
+# Данные для личного аккаунта
 TELETHON_API_ID = int(os.environ.get("TELETHON_API_ID", "32199693"))
 TELETHON_API_HASH = os.environ.get("TELETHON_API_HASH", "0f27e89d40cd2a025f98b24bc676c943")
+SESSION_PATH = os.environ.get("SESSION_PATH", "gift_session.session")
 # ====================================
 
 ROSE_GIFT_ID = 5168103777563050263
@@ -141,45 +143,44 @@ def build_prize_grid_revealed(winner_user_id: int, message_id: int, selected_ind
 
 
 async def send_rose(username: str) -> bool:
-    """Отправка розы через Telegram API"""
+    """Отправка розы через личный аккаунт"""
     try:
-        # Получаем ID пользователя по username
+        # Получаем пользователя
         user = await telethon_client.get_entity(username)
-        user_id = user.id
         
-        # Используем метод send_star_gift через функцию
-        # Пробуем разные способы отправки
-        try:
-            # Способ 1: Через messages.SendStarGift
-            result = await telethon_client(functions.messages.SendStarGiftRequest(
-                peer=user_id,
-                gift_id=ROSE_GIFT_ID,
-                hide_name=False,
-                message=GIFT_COMMENT if GIFT_COMMENT else None
-            ))
-            return True
-        except Exception as e1:
-            log.error(f"Способ 1 не работает: {e1}")
-            
-            try:
-                # Способ 2: Через payments.SendStarsForm
-                invoice = types.InputInvoiceStarGift(
-                    peer=user_id,
-                    gift_id=ROSE_GIFT_ID,
-                    hide_name=False,
-                )
-                form = await telethon_client(functions.payments.GetPaymentFormRequest(invoice=invoice))
-                await telethon_client(functions.payments.SendStarsFormRequest(
-                    form_id=form.form_id,
-                    invoice=invoice
-                ))
-                return True
-            except Exception as e2:
-                log.error(f"Способ 2 не работает: {e2}")
-                return False
-                
+        # Создаем инвойс для подарка
+        invoice = InputInvoiceStarGift(
+            peer=user.id,
+            gift_id=ROSE_GIFT_ID,
+            hide_name=False,
+            message=GIFT_COMMENT if GIFT_COMMENT else None
+        )
+        
+        # Получаем форму оплаты
+        form = await telethon_client(GetPaymentFormRequest(
+            invoice=invoice
+        ))
+        
+        # Отправляем подарок
+        await telethon_client(SendStarsFormRequest(
+            form_id=form.form_id,
+            invoice=invoice
+        ))
+        
+        log.info(f"✅ Роза отправлена пользователю {username}")
+        return True
+        
     except Exception as e:
         log.error(f"Ошибка отправки розы: {e}")
+        
+        # Если не получилось - уведомляем админа
+        await bot.send_message(
+            ADMIN_ID,
+            f"❌ Не удалось отправить розу автоматически\n"
+            f"Пользователь: @{username}\n"
+            f"Ошибка: {str(e)[:100]}\n\n"
+            f"Отправь вручную! 🌹"
+        )
         return False
 
 
@@ -266,6 +267,7 @@ async def handle_prize_select(callback: CallbackQuery):
             reply_markup=build_prize_grid_revealed(winner_id, message_id, selected_index)
         )
 
+        # Отправляем розу автоматически
         sent = await send_rose(user.username)
 
         if sent:
@@ -282,12 +284,6 @@ async def handle_prize_select(callback: CallbackQuery):
                 f"❌ Не удалось отправить автоматически\n"
                 f"@{ADMIN_USERNAME} выдаст подарок вручную",
                 reply_markup=build_prize_grid_revealed(winner_id, message_id, selected_index)
-            )
-            await bot.send_message(
-                ADMIN_ID,
-                f"❌ Не смог отправить розу автоматически\n"
-                f"Пользователь: {username} (id <code>{user.id}</code>)\n"
-                f"Выдай вручную!"
             )
 
         await callback.answer("🌹 Вы нашли розу!", show_alert=True)
@@ -343,13 +339,13 @@ async def main():
     # Инициализация базы данных
     db_init()
     
-    # Подключение Telethon с бот-токеном
-    log.info("📱 Подключение Telethon через бот-токен...")
+    # Подключение Telethon с личным аккаунтом
+    log.info(f"📱 Подключение Telethon с сессией: {SESSION_PATH}")
+    telethon_client = TelegramClient(SESSION_PATH, TELETHON_API_ID, TELETHON_API_HASH)
+    await telethon_client.start()
+    log.info("✅ Telethon подключен (личный аккаунт)")
     
-    telethon_client = TelegramClient(StringSession(), TELETHON_API_ID, TELETHON_API_HASH)
-    await telethon_client.start(bot_token=BOT_TOKEN)
-    log.info("✅ Telethon подключен как бот")
-    
+    # Запуск бота
     log.info("🤖 Бот запущен и работает в группе @ludkanihers")
     await dp.start_polling(bot)
 
