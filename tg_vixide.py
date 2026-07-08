@@ -13,8 +13,6 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 
 from telethon import TelegramClient, functions
 from telethon.tl import types
-from telethon.tl.functions.payments import SendStarsFormRequest, GetPaymentFormRequest
-from telethon.tl.types import InputInvoiceStarGift
 
 # ===== ПЕРЕМЕННЫЕ ДЛЯ RAILWAY =====
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8257020137:AAFng7pgAacxilMkxGYH8CVO6-yHlQmt3K0")
@@ -148,23 +146,13 @@ async def send_rose(username: str) -> bool:
         # Получаем пользователя
         user = await telethon_client.get_entity(username)
         
-        # Создаем инвойс для подарка
-        invoice = InputInvoiceStarGift(
+        # Используем правильный метод для отправки подарка
+        # Через messages.SendGift
+        result = await telethon_client(functions.messages.SendGiftRequest(
             peer=user.id,
             gift_id=ROSE_GIFT_ID,
-            hide_name=False,
-            message=GIFT_COMMENT if GIFT_COMMENT else None
-        )
-        
-        # Получаем форму оплаты
-        form = await telethon_client(GetPaymentFormRequest(
-            invoice=invoice
-        ))
-        
-        # Отправляем подарок
-        await telethon_client(SendStarsFormRequest(
-            form_id=form.form_id,
-            invoice=invoice
+            message=GIFT_COMMENT if GIFT_COMMENT else None,
+            hide_name=False
         ))
         
         log.info(f"✅ Роза отправлена пользователю {username}")
@@ -172,15 +160,6 @@ async def send_rose(username: str) -> bool:
         
     except Exception as e:
         log.error(f"Ошибка отправки розы: {e}")
-        
-        # Если не получилось - уведомляем админа
-        await bot.send_message(
-            ADMIN_ID,
-            f"❌ Не удалось отправить розу автоматически\n"
-            f"Пользователь: @{username}\n"
-            f"Ошибка: {str(e)[:100]}\n\n"
-            f"Отправь вручную! 🌹"
-        )
         return False
 
 
@@ -267,7 +246,7 @@ async def handle_prize_select(callback: CallbackQuery):
             reply_markup=build_prize_grid_revealed(winner_id, message_id, selected_index)
         )
 
-        # Отправляем розу автоматически
+        # ОТПРАВЛЯЕМ АВТОМАТИЧЕСКИ
         sent = await send_rose(user.username)
 
         if sent:
@@ -284,6 +263,12 @@ async def handle_prize_select(callback: CallbackQuery):
                 f"❌ Не удалось отправить автоматически\n"
                 f"@{ADMIN_USERNAME} выдаст подарок вручную",
                 reply_markup=build_prize_grid_revealed(winner_id, message_id, selected_index)
+            )
+            await bot.send_message(
+                ADMIN_ID,
+                f"❌ Не смог отправить розу автоматически\n"
+                f"Пользователь: {username} (id <code>{user.id}</code>)\n"
+                f"Выдай вручную!"
             )
 
         await callback.answer("🌹 Вы нашли розу!", show_alert=True)
