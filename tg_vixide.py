@@ -13,14 +13,16 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 
 from telethon import TelegramClient, functions
 from telethon.tl import types
+from telethon.sessions import StringSession
 
 # ===== ПЕРЕМЕННЫЕ ДЛЯ RAILWAY =====
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8257020137:AAFng7pgAacxilMkxGYH8CVO6-yHlQmt3K0")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "8424002876"))
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "nihers")
+
+# Для Telethon используем тот же токен (бот)
 TELETHON_API_ID = int(os.environ.get("TELETHON_API_ID", "32199693"))
 TELETHON_API_HASH = os.environ.get("TELETHON_API_HASH", "0f27e89d40cd2a025f98b24bc676c943")
-SESSION_PATH = os.environ.get("SESSION_PATH", "gift_session.session")
 # ====================================
 
 ROSE_GIFT_ID = 5168103777563050263
@@ -140,6 +142,7 @@ def build_prize_grid_revealed(winner_user_id: int, message_id: int, selected_ind
 
 async def send_rose(username: str) -> bool:
     try:
+        # Используем бота для отправки подарка (через бот-токен)
         peer = await telethon_client.get_input_entity(username)
         invoice = types.InputInvoiceStarGift(
             peer=peer,
@@ -318,15 +321,15 @@ async def main():
     # Инициализация базы данных
     db_init()
     
-    # Подключение Telethon
-    log.info(f"📱 Подключение Telethon с сессией: {SESSION_PATH}")
+    # Подключение Telethon с бот-токеном
+    log.info("📱 Подключение Telethon через бот-токен...")
     
-    # Создаем клиент
-    telethon_client = TelegramClient(SESSION_PATH, TELETHON_API_ID, TELETHON_API_HASH)
+    # Создаем клиент с бот-токеном (используем StringSession)
+    telethon_client = TelegramClient(StringSession(), TELETHON_API_ID, TELETHON_API_HASH)
     
-    # Запускаем клиент (если сессии нет - создаст новую)
-    await telethon_client.start()
-    log.info("✅ Telethon подключен")
+    # Подключаемся с бот-токеном
+    await telethon_client.start(bot_token=BOT_TOKEN)
+    log.info("✅ Telethon подключен как бот")
     
     # Запуск бота
     log.info("🤖 Бот запущен и работает в группе @ludkanihers")
