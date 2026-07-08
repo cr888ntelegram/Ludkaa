@@ -319,7 +319,12 @@ async def main():
     db_init()
     
     # Подключение Telethon
+    log.info(f"📱 Подключение Telethon с сессией: {SESSION_PATH}")
+    
+    # Создаем клиент
     telethon_client = TelegramClient(SESSION_PATH, TELETHON_API_ID, TELETHON_API_HASH)
+    
+    # Запускаем клиент (если сессии нет - создаст новую)
     await telethon_client.start()
     log.info("✅ Telethon подключен")
     
