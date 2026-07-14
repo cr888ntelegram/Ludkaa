@@ -44,6 +44,35 @@ dp = Dispatcher()
 
 frog_positions = {}
 
+# ===== НАСТРОЙКА ПРИЗОВОЙ СЕТКИ =====
+GRID_SIZE = 25
+NFT_COUNT = 1
+ROSE_COUNT = 12
+EMPTY_COUNT = 12
+# =====================================
+
+prize_grids: dict[str, list[str]] = {}
+
+def generate_prize_grid() -> list[str]:
+    grid = ["nft"] * NFT_COUNT + ["rose"] * ROSE_COUNT + ["empty"] * EMPTY_COUNT
+    random.shuffle(grid)
+    return grid
+
+def build_prize_grid_revealed(winner_user_id: int, message_id: int, selected_index: int) -> InlineKeyboardMarkup:
+    grid = prize_grids.get(f"{winner_user_id}_{message_id}", ["empty"] * GRID_SIZE)
+    icons = {"nft": "🐸", "rose": "🌹", "empty": "▪️"}
+
+    buttons, row = [], []
+    for i in range(GRID_SIZE):
+        prize = grid[i]
+        icon = icons[prize]
+        button_text = f"✅{icon}" if i == selected_index else icon
+        cb_data = f"prize:revealed:{prize}:{winner_user_id}"
+        row.append(InlineKeyboardButton(text=button_text, callback_data=cb_data))
+        if len(row) == 5:
+            buttons.append(row); row = []
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
 
 def db_init():
     with closing(sqlite3.connect(DB_PATH)) as con:
@@ -96,8 +125,8 @@ def decode_slot(value: int):
 
 
 def build_prize_grid_hidden(winner_user_id: int, message_id: int):
-    frog_index = random.randint(0, 24)
-    frog_positions[f"{winner_user_id}_{message_id}"] = frog_index
+    grid = generate_prize_grid()
+    prize_grids[f"{winner_user_id}_{message_id}"] = grid
     
     buttons = []
     row = []
@@ -107,30 +136,6 @@ def build_prize_grid_hidden(winner_user_id: int, message_id: int):
         if len(row) == 5:
             buttons.append(row)
             row = []
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
-def build_prize_grid_revealed(winner_user_id: int, message_id: int, selected_index: int):
-    frog_index = frog_positions.get(f"{winner_user_id}_{message_id}", 0)
-    
-    buttons = []
-    row = []
-    for i in range(25):
-        if i == frog_index:
-            button_text = "🐸"
-            cb_data = f"prize:revealed:nft:{winner_user_id}"
-        else:
-            if i == selected_index:
-                button_text = "✅🌹"
-            else:
-                button_text = "🌹"
-            cb_data = f"prize:revealed:rose:{winner_user_id}"
-        
-        row.append(InlineKeyboardButton(text=button_text, callback_data=cb_data))
-        if len(row) == 5:
-            buttons.append(row)
-            row = []
-    
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -195,19 +200,22 @@ async def handle_prize_select(callback: CallbackQuery):
         await callback.answer("❌ Не твой приз!", show_alert=True)
         return
 
-    frog_index = frog_positions.get(f"{winner_id}_{message_id}", 0)
+    grid = prize_grids.get(f"{winner_id}_{message_id}", [])
+    if not grid:
+        await callback.answer("❌ Призы уже забраны!", show_alert=True)
+        return
+
+    prize = grid[selected_index]
     username = f"@{user.username}" if user.username else user.full_name
     
-    if selected_index == frog_index:
-        # Нашел NFT
+    if prize == "nft":
         await callback.message.edit_text(
             f"🐸 NFT НАЙДЕН!\n\n{username} нашел 🐸 NFT!\n\n@{ADMIN_USERNAME} выдаст вручную",
             reply_markup=build_prize_grid_revealed(winner_id, message_id, selected_index)
         )
         await callback.answer("🐸 NFT!", show_alert=True)
         await bot.send_message(ADMIN_ID, f"🎉 Игрок {username} нашел NFT! Выдай вручную!")
-    else:
-        # Нашел розу
+    elif prize == "rose":
         db_bump(user.id, username, "roses_won")
         
         await callback.message.edit_text(
@@ -233,6 +241,17 @@ async def handle_prize_select(callback: CallbackQuery):
             )
 
         await callback.answer("🌹 Роза!", show_alert=True)
+    else:
+        await callback.message.edit_text(
+            f"▪️ Пусто!\n\n{username}, тебе ничего не выпало 😢",
+            reply_markup=build_prize_grid_revealed(winner_id, message_id, selected_index)
+        )
+        await callback.answer("▪️ Пусто!", show_alert=True)
+
+
+@dp.callback_query(F.data.startswith("prize:revealed:"))
+async def handle_prize_revealed_noop(callback: CallbackQuery):
+    await callback.answer()
 
 
 @dp.message(Command("top"))
