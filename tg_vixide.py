@@ -47,20 +47,21 @@ frog_positions = {}
 # ===== НАСТРОЙКА ПРИЗОВОЙ СЕТКИ =====
 GRID_SIZE = 25
 NFT_COUNT = 1
-ROSE_COUNT = 12
-EMPTY_COUNT = 12
+ROSE_COUNT = 8
+EMPTY_COUNT = 8
+BEAR_COUNT = 8
 # =====================================
 
 prize_grids: dict[str, list[str]] = {}
 
 def generate_prize_grid() -> list[str]:
-    grid = ["nft"] * NFT_COUNT + ["rose"] * ROSE_COUNT + ["empty"] * EMPTY_COUNT
+    grid = ["nft"] * NFT_COUNT + ["rose"] * ROSE_COUNT + ["empty"] * EMPTY_COUNT + ["bear"] * BEAR_COUNT
     random.shuffle(grid)
     return grid
 
 def build_prize_grid_revealed(winner_user_id: int, message_id: int, selected_index: int) -> InlineKeyboardMarkup:
     grid = prize_grids.get(f"{winner_user_id}_{message_id}", ["empty"] * GRID_SIZE)
-    icons = {"nft": "🐸", "rose": "🌹", "empty": "▪️"}
+    icons = {"nft": "🐸", "rose": "🌹", "empty": "▪️", "bear": "🧸"}
 
     buttons, row = [], []
     for i in range(GRID_SIZE):
@@ -180,7 +181,7 @@ async def handle_slot(message: Message):
     if sevens == 3:
         db_bump(user.id, username, "jackpots")
         await message.reply(
-            f"🎰 ДЖЕКПОТ!\n\n🎉 {username} сорвал банк!\n\n👇 Выбери слот:\nЗа одним из них спрятана 🐸 NFT\nОстальные — 🌹 розы!",
+            f"🎰 ДЖЕКПОТ!\n\n🎉 {username} сорвал банк!\n\n👇 Выбери слот:\nЗа одним из них спрятана 🐸 NFT\nОстальные — 🌹 розы, 🧸 мишки или ▪️ пусто!",
             reply_markup=build_prize_grid_hidden(user.id, message.message_id)
         )
     elif sevens == 2:
@@ -215,6 +216,7 @@ async def handle_prize_select(callback: CallbackQuery):
         )
         await callback.answer("🐸 NFT!", show_alert=True)
         await bot.send_message(ADMIN_ID, f"🎉 Игрок {username} нашел NFT! Выдай вручную!")
+        
     elif prize == "rose":
         db_bump(user.id, username, "roses_won")
         
@@ -241,7 +243,16 @@ async def handle_prize_select(callback: CallbackQuery):
             )
 
         await callback.answer("🌹 Роза!", show_alert=True)
-    else:
+        
+    elif prize == "bear":
+        await callback.message.edit_text(
+            f"🧸 МИШКА!\n\n{username} нашел 🧸 мишку!\n\n@{ADMIN_USERNAME} выдаст вручную",
+            reply_markup=build_prize_grid_revealed(winner_id, message_id, selected_index)
+        )
+        await callback.answer("🧸 Мишка!", show_alert=True)
+        await bot.send_message(ADMIN_ID, f"🧸 Игрок {username} нашел Мишку! Выдай вручную!")
+        
+    else:  # prize == "empty"
         await callback.message.edit_text(
             f"▪️ Пусто!\n\n{username}, тебе ничего не выпало 😢",
             reply_markup=build_prize_grid_revealed(winner_id, message_id, selected_index)
