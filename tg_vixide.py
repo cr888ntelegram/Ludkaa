@@ -1,6 +1,6 @@
+import os
 import asyncio
 import logging
-import os
 import random
 import sqlite3
 from contextlib import closing
@@ -15,18 +15,22 @@ from telethon import TelegramClient, functions
 from telethon.tl import types
 from telethon.sessions import StringSession
 
-# ===== ПЕРЕМЕННЫЕ =====
-BOT_TOKEN = "8257020137:AAFng7pgAacxilMkxGYH8CVO6-yHlQmt3K0"
-ADMIN_ID = 8424002876
-ADMIN_USERNAME = "nihers"
+# ===== ВСЕ ДАННЫЕ БЕРУТСЯ ИЗ ПЕРЕМЕННЫХ ОКРУЖЕНИЯ =====
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME")
 
-TELETHON_API_ID = 32199693
-TELETHON_API_HASH = "0f27e89d40cd2a025f98b24bc676c943"
+TELETHON_API_ID = int(os.environ.get("TELETHON_API_ID", "0"))
+TELETHON_API_HASH = os.environ.get("TELETHON_API_HASH")
+STRING_SESSION = os.environ.get("STRING_SESSION", "")
+# =====================================================
 
-STRING_SESSION = os.environ.get("STRING_SESSION", "1ApWapzMBu408VIrAysGQCE56NXr_KOX2HvjoTUy-hgJbWMDvjGWUT_wSfzzyVV-ofd_8Gw_LgEW3CXPBCw4g9FxPT9pA22Kez6F6e3yY1HXEniw-uBQ-Ga4PddpYcNLrlsIiTt6kV9sajIg3sm2fqtfx4uUjj0b2W_OzX76jRB8bSA2g1TbHoQoLvK5kYMYja0EUZ9MLm58MdMHjis04GWHXLiaHI9ncmKnTPwco77nszDc8uvH6AQKXRADPO30HOXlsd-dHF6x108KmKNgqVZaUJFdiLIwTcjQrthkP1Esm56hly1uGPQI185qTjSBC1-9gPWKjmp98iiKjuEW6zHQUfM_bOvM=")
-# ======================
+# Проверка что все переменные есть
+if not all([BOT_TOKEN, ADMIN_ID, ADMIN_USERNAME, TELETHON_API_ID, TELETHON_API_HASH]):
+    raise ValueError("❌ Не все переменные окружения установлены!")
 
 ROSE_GIFT_ID = 5168103777563050263
+BEAR_GIFT_ID = 5170233102089322756
 GIFT_COMMENT = "Приз за участие - @ludkanihers!"
 
 DB_PATH = "slotbot.db"
@@ -306,7 +310,7 @@ async def main():
     db_init()
     
     if not STRING_SESSION:
-        log.error("❌ STRING_SESSION не найдена! Добавь переменную на Railway")
+        log.error("❌ STRING_SESSION не найдена! Добавь переменную на Bothost")
         return
     
     log.info("📱 Подключаем Telethon через StringSession...")
