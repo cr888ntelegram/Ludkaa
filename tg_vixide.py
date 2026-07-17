@@ -1,6 +1,6 @@
-import os
 import asyncio
 import logging
+import os
 import random
 import sqlite3
 from contextlib import closing
@@ -15,7 +15,7 @@ from telethon import TelegramClient, functions
 from telethon.tl import types
 from telethon.sessions import StringSession
 
-# ===== ВСЕ ДАННЫЕ БЕРУТСЯ ИЗ ПЕРЕМЕННЫХ ОКРУЖЕНИЯ =====
+# ===== ВСЕ ДАННЫЕ ИЗ ПЕРЕМЕННЫХ ОКРУЖЕНИЯ =====
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME")
@@ -29,8 +29,11 @@ STRING_SESSION = os.environ.get("STRING_SESSION", "")
 if not all([BOT_TOKEN, ADMIN_ID, ADMIN_USERNAME, TELETHON_API_ID, TELETHON_API_HASH]):
     raise ValueError("❌ Не все переменные окружения установлены!")
 
-ROSE_GIFT_ID = 5168103777563050263
-BEAR_GIFT_ID = 5170233102089322756
+# ===== ID ПОДАРКОВ (ЗАМЕНИ НА СВОИ) =====
+ROSE_GIFT_ID = 5168103777563050263   # ID Розы
+BEAR_GIFT_ID = 5170233102089322756   # ID Мишки (ЗАМЕНИ НА РЕАЛЬНЫЙ!)
+# ========================================
+
 GIFT_COMMENT = "Приз за участие - @ludkanihers!"
 
 DB_PATH = "slotbot.db"
@@ -88,7 +91,8 @@ def db_init():
                 spins INTEGER DEFAULT 0,
                 jackpots INTEGER DEFAULT 0,
                 near_miss INTEGER DEFAULT 0,
-                roses_won INTEGER DEFAULT 0
+                roses_won INTEGER DEFAULT 0,
+                bears_won INTEGER DEFAULT 0
             )
         """)
         con.commit()
@@ -98,8 +102,8 @@ def db_init():
 def db_bump(user_id: int, username: str, field: str, amount: int = 1):
     with closing(sqlite3.connect(DB_PATH)) as con:
         con.execute("""
-            INSERT INTO stats (user_id, username, spins, jackpots, near_miss, roses_won)
-            VALUES (?, ?, 0, 0, 0, 0)
+            INSERT INTO stats (user_id, username, spins, jackpots, near_miss, roses_won, bears_won)
+            VALUES (?, ?, 0, 0, 0, 0, 0)
             ON CONFLICT(user_id) DO UPDATE SET username=excluded.username
         """, (user_id, username))
         con.execute(f"UPDATE stats SET {field} = {field} + ? WHERE user_id = ?", (amount, user_id))
@@ -108,7 +112,7 @@ def db_bump(user_id: int, username: str, field: str, amount: int = 1):
 
 def db_get_total_stats():
     with closing(sqlite3.connect(DB_PATH)) as con:
-        cur = con.execute("SELECT SUM(spins), SUM(roses_won) FROM stats")
+        cur = con.execute("SELECT SUM(spins), SUM(roses_won), SUM(bears_won) FROM stats")
         return cur.fetchone()
 
 
@@ -144,24 +148,32 @@ def build_prize_grid_hidden(winner_user_id: int, message_id: int):
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-async def send_rose(username: str) -> bool:
+async def send_gift(username: str, gift_id: int, gift_name: str = "подарок") -> bool:
+    """Универсальная отправка подарка через Telethon"""
     try:
+        if not telethon_client:
+            log.error("❌ Telethon не подключен!")
+            return False
+            
         peer = await telethon_client.get_input_entity(username)
         invoice = types.InputInvoiceStarGift(
             peer=peer,
-            gift_id=ROSE_GIFT_ID,
+            gift_id=gift_id,
             hide_name=False,
-            message=types.TextWithEntities(text=GIFT_COMMENT, entities=[]) if GIFT_COMMENT else None
+            message=types.TextWithEntities(
+                text=GIFT_COMMENT, 
+                entities=[]
+            )
         )
         form = await telethon_client(functions.payments.GetPaymentFormRequest(invoice=invoice))
         await telethon_client(functions.payments.SendStarsFormRequest(
             form_id=form.form_id,
             invoice=invoice
         ))
-        log.info(f"✅ Роза отправлена {username}")
+        log.info(f"✅ {gift_name} отправлен {username}")
         return True
     except Exception as e:
-        log.error(f"Ошибка: {e}")
+        log.error(f"Ошибка отправки {gift_name}: {e}")
         return False
 
 
@@ -185,12 +197,20 @@ async def handle_slot(message: Message):
     if sevens == 3:
         db_bump(user.id, username, "jackpots")
         await message.reply(
-            f"🎰 ДЖЕКПОТ!\n\n🎉 {username} сорвал банк!\n\n👇 Выбери слот:\nЗа одним из них спрятана 🐸 NFT\nОстальные — 🌹 розы, 🧸 мишки или ▪️ пусто!",
+            f"🎰 <b>ДЖЕКПОТ!</b>\n\n"
+            f"🎉 {username} сорвал банк!\n\n"
+            f"👇 <b>Выбери слот:</b>\n"
+            f"За одним из них спрятана 🐸 NFT\n"
+            f"Остальные — 🌹 розы, 🧸 мишки или ▪️ пусто!",
             reply_markup=build_prize_grid_hidden(user.id, message.message_id)
         )
     elif sevens == 2:
         db_bump(user.id, username, "near_miss")
-        await message.reply(f"⭐ Почти джекпот! {username}, не хватило одной семерки!")
+        await message.reply(
+            f"⭐ <b>Почти джекпот!</b>\n\n"
+            f"{username}, тебе не хватило одной семерки!\n"
+            f"Повезет в следующий раз! 🍀"
+        )
 
 
 @dp.callback_query(F.data.startswith("prize:select:"))
@@ -215,7 +235,10 @@ async def handle_prize_select(callback: CallbackQuery):
     
     if prize == "nft":
         await callback.message.edit_text(
-            f"🐸 NFT НАЙДЕН!\n\n{username} нашел 🐸 NFT!\n\n@{ADMIN_USERNAME} выдаст вручную",
+            f"🐸 <b>NFT НАЙДЕН!</b>\n\n"
+            f"{username} нашел 🐸 NFT!\n\n"
+            f"🎉 Поздравляем! Это эксклюзивный приз!\n"
+            f"@{ADMIN_USERNAME} выдаст вручную",
             reply_markup=build_prize_grid_revealed(winner_id, message_id, selected_index)
         )
         await callback.answer("🐸 NFT!", show_alert=True)
@@ -225,40 +248,77 @@ async def handle_prize_select(callback: CallbackQuery):
         db_bump(user.id, username, "roses_won")
         
         await callback.message.edit_text(
-            f"🌹 РОЗА!\n\n{username} нашел 🌹 розу!\n⏳ Отправляем...",
+            f"🌹 <b>РОЗА!</b>\n\n"
+            f"{username} нашел 🌹 розу!\n⏳ Отправляем...",
             reply_markup=build_prize_grid_revealed(winner_id, message_id, selected_index)
         )
 
-        sent = await send_rose(user.username)
+        sent = await send_gift(user.username, ROSE_GIFT_ID, "Роза")
         
         if sent:
             await callback.message.edit_text(
-                f"🌹 Подарок отправлен!\n\n{username}, ты нашел розу!\nПроверь свои подарки в Telegram! 🎁",
+                f"🌹 <b>Подарок отправлен!</b>\n\n"
+                f"{username}, ты нашел розу!\n"
+                f"Проверь свои подарки в Telegram! 🎁",
                 reply_markup=build_prize_grid_revealed(winner_id, message_id, selected_index)
             )
         else:
             await callback.message.edit_text(
-                f"🌹 Роза найдена!\n\n{username} нашел розу!\n\n❌ Не удалось отправить автоматически\n@{ADMIN_USERNAME} выдаст подарок вручную",
+                f"🌹 <b>Роза найдена!</b>\n\n"
+                f"{username} нашел розу!\n\n"
+                f"❌ Не удалось отправить автоматически\n"
+                f"@{ADMIN_USERNAME} выдаст подарок вручную",
                 reply_markup=build_prize_grid_revealed(winner_id, message_id, selected_index)
             )
             await bot.send_message(
                 ADMIN_ID,
-                f"❌ Не смог отправить розу\nПользователь: {username} (id {user.id})\nВыдай вручную!"
+                f"❌ Не смог отправить розу\n"
+                f"Пользователь: {username} (id {user.id})\n"
+                f"Выдай вручную!"
             )
 
         await callback.answer("🌹 Роза!", show_alert=True)
         
     elif prize == "bear":
+        db_bump(user.id, username, "bears_won")
+        
         await callback.message.edit_text(
-            f"🧸 МИШКА!\n\n{username} нашел 🧸 мишку!\n\n@{ADMIN_USERNAME} выдаст вручную",
+            f"🧸 <b>МИШКА!</b>\n\n"
+            f"{username} нашел 🧸 мишку!\n⏳ Отправляем...",
             reply_markup=build_prize_grid_revealed(winner_id, message_id, selected_index)
         )
+
+        sent = await send_gift(user.username, BEAR_GIFT_ID, "Мишка")
+        
+        if sent:
+            await callback.message.edit_text(
+                f"🧸 <b>Подарок отправлен!</b>\n\n"
+                f"{username}, ты нашел мишку!\n"
+                f"Проверь свои подарки в Telegram! 🎁",
+                reply_markup=build_prize_grid_revealed(winner_id, message_id, selected_index)
+            )
+        else:
+            await callback.message.edit_text(
+                f"🧸 <b>Мишка найден!</b>\n\n"
+                f"{username} нашел мишку!\n\n"
+                f"❌ Не удалось отправить автоматически\n"
+                f"@{ADMIN_USERNAME} выдаст подарок вручную",
+                reply_markup=build_prize_grid_revealed(winner_id, message_id, selected_index)
+            )
+            await bot.send_message(
+                ADMIN_ID,
+                f"❌ Не смог отправить мишку\n"
+                f"Пользователь: {username} (id {user.id})\n"
+                f"Выдай вручную!"
+            )
+
         await callback.answer("🧸 Мишка!", show_alert=True)
-        await bot.send_message(ADMIN_ID, f"🧸 Игрок {username} нашел Мишку! Выдай вручную!")
         
     else:  # prize == "empty"
         await callback.message.edit_text(
-            f"▪️ Пусто!\n\n{username}, тебе ничего не выпало 😢",
+            f"▪️ <b>Пусто!</b>\n\n"
+            f"{username}, тебе ничего не выпало 😢\n"
+            f"В следующий раз повезет! 🍀",
             reply_markup=build_prize_grid_revealed(winner_id, message_id, selected_index)
         )
         await callback.answer("▪️ Пусто!", show_alert=True)
@@ -280,7 +340,7 @@ async def cmd_top(message: Message):
         await message.reply("🏆 Пока никто не крутил")
         return
 
-    lines = ["🏆 ТОП ИГРОКОВ\n"]
+    lines = ["🏆 <b>ТОП ИГРОКОВ</b>\n"]
     for i, (username, jackpots, near_miss, spins) in enumerate(rows, start=1):
         medal = ["🥇", "🥈", "🥉"][i-1] if i <= 3 else f"{i}."
         lines.append(f"{medal} {username} — 🎰 {jackpots} джекпотов, ⭐️ {near_miss} почти, 🔄 {spins} спинов")
@@ -299,9 +359,38 @@ async def cmd_admin_stats(message: Message):
         return
     
     await message.reply(
-        f"📊 СТАТИСТИКА БОТА\n\n"
+        f"📊 <b>СТАТИСТИКА БОТА</b>\n\n"
         f"🎰 Всего спинов: {total[0] or 0}\n"
-        f"🌹 Всего роз: {total[1] or 0}"
+        f"🌹 Всего роз выдано: {total[1] or 0}\n"
+        f"🧸 Всего мишек выдано: {total[2] or 0}"
+    )
+
+
+@dp.message(Command("stats"))
+async def cmd_stats(message: Message):
+    """Личная статистика"""
+    user = message.from_user
+    with closing(sqlite3.connect(DB_PATH)) as con:
+        cur = con.execute(
+            "SELECT spins, jackpots, near_miss, roses_won, bears_won FROM stats WHERE user_id = ?",
+            (user.id,)
+        )
+        row = cur.fetchone()
+    
+    if not row:
+        await message.reply("📊 У тебя пока нет статистики. Крути слот! 🎰")
+        return
+    
+    username = f"@{user.username}" if user.username else user.full_name
+    
+    await message.reply(
+        f"📊 <b>ТВОЯ СТАТИСТИКА</b>\n\n"
+        f"👤 {username}\n\n"
+        f"🎰 Спинов: {row[0]}\n"
+        f"🎰 Джекпотов: {row[1]}\n"
+        f"⭐ Почти джекпотов: {row[2]}\n"
+        f"🌹 Роз выиграно: {row[3]}\n"
+        f"🧸 Мишек выиграно: {row[4]}"
     )
 
 
@@ -309,16 +398,21 @@ async def main():
     global telethon_client
     db_init()
     
-    if not STRING_SESSION:
-        log.error("❌ STRING_SESSION не найдена! Добавь переменную на Bothost")
-        return
+    # Подключение Telethon для автовыдачи
+    if STRING_SESSION:
+        try:
+            log.info("📱 Подключаем Telethon через StringSession...")
+            telethon_client = TelegramClient(StringSession(STRING_SESSION), TELETHON_API_ID, TELETHON_API_HASH)
+            await telethon_client.start()
+            log.info("✅ Telethon подключен! Автовыдача работает!")
+        except Exception as e:
+            log.error(f"❌ Ошибка подключения Telethon: {e}")
+            log.warning("⚠️ Автовыдача НЕ РАБОТАЕТ! Бот работает только с уведомлениями.")
+    else:
+        log.warning("⚠️ STRING_SESSION не найдена! Автовыдача НЕ РАБОТАЕТ!")
+        log.info("ℹ️ Бот будет работать в режиме уведомлений (админ выдает вручную)")
     
-    log.info("📱 Подключаем Telethon через StringSession...")
-    telethon_client = TelegramClient(StringSession(STRING_SESSION), TELETHON_API_ID, TELETHON_API_HASH)
-    await telethon_client.start()
-    log.info("✅ Telethon подключен!")
-    
-    log.info("🤖 Бот запущен!")
+    log.info("🤖 Бот запущен и работает в группе @ludkanihers!")
     await dp.start_polling(bot)
 
 
