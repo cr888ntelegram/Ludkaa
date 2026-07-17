@@ -25,13 +25,12 @@ TELETHON_API_HASH = os.environ.get("TELETHON_API_HASH")
 STRING_SESSION = os.environ.get("STRING_SESSION", "")
 # =====================================================
 
-# Проверка что все переменные есть
 if not all([BOT_TOKEN, ADMIN_ID, ADMIN_USERNAME, TELETHON_API_ID, TELETHON_API_HASH]):
     raise ValueError("❌ Не все переменные окружения установлены!")
 
-# ===== ID ПОДАРКОВ (ЗАМЕНИ НА СВОИ) =====
+# ===== ID ПОДАРКОВ =====
 ROSE_GIFT_ID = 5168103777563050263   # ID Розы
-BEAR_GIFT_ID = 5170233102089322756   # ID Мишки (ЗАМЕНИ НА РЕАЛЬНЫЙ!)
+BEAR_GIFT_ID = 5170233102089322756   # ID Мишки (ЗАМЕНИ!)
 # ========================================
 
 GIFT_COMMENT = "Приз за участие - @ludkanihers!"
@@ -156,22 +155,41 @@ async def send_gift(username: str, gift_id: int, gift_name: str = "подаро�
             return False
             
         peer = await telethon_client.get_input_entity(username)
-        invoice = types.InputInvoiceStarGift(
-            peer=peer,
-            gift_id=gift_id,
-            hide_name=False,
-            message=types.TextWithEntities(
-                text=GIFT_COMMENT, 
-                entities=[]
-            )
-        )
-        form = await telethon_client(functions.payments.GetPaymentFormRequest(invoice=invoice))
-        await telethon_client(functions.payments.SendStarsFormRequest(
-            form_id=form.form_id,
-            invoice=invoice
-        ))
-        log.info(f"✅ {gift_name} отправлен {username}")
-        return True
+        
+        # Пробуем отправить через messages.SendGift
+        try:
+            await telethon_client(functions.messages.SendGiftRequest(
+                peer=peer,
+                gift_id=gift_id,
+                message=GIFT_COMMENT,
+                hide_name=False
+            ))
+            log.info(f"✅ {gift_name} отправлен {username}")
+            return True
+        except Exception as e:
+            log.warning(f"SendGift не сработал: {e}")
+            
+            # Альтернативный способ через payments
+            try:
+                from telethon.tl.functions.payments import SendStarsFormRequest, GetPaymentFormRequest
+                
+                invoice = types.InputInvoiceStarGift(
+                    peer=peer,
+                    gift_id=gift_id,
+                    hide_name=False,
+                    message=GIFT_COMMENT
+                )
+                form = await telethon_client(GetPaymentFormRequest(invoice=invoice))
+                await telethon_client(SendStarsFormRequest(
+                    form_id=form.form_id,
+                    invoice=invoice
+                ))
+                log.info(f"✅ {gift_name} отправлен {username} (способ 2)")
+                return True
+            except Exception as e2:
+                log.error(f"Ошибка отправки {gift_name}: {e2}")
+                return False
+                
     except Exception as e:
         log.error(f"Ошибка отправки {gift_name}: {e}")
         return False
@@ -368,7 +386,6 @@ async def cmd_admin_stats(message: Message):
 
 @dp.message(Command("stats"))
 async def cmd_stats(message: Message):
-    """Личная статистика"""
     user = message.from_user
     with closing(sqlite3.connect(DB_PATH)) as con:
         cur = con.execute(
@@ -398,7 +415,6 @@ async def main():
     global telethon_client
     db_init()
     
-    # Подключение Telethon для автовыдачи
     if STRING_SESSION:
         try:
             log.info("📱 Подключаем Telethon через StringSession...")
@@ -407,12 +423,11 @@ async def main():
             log.info("✅ Telethon подключен! Автовыдача работает!")
         except Exception as e:
             log.error(f"❌ Ошибка подключения Telethon: {e}")
-            log.warning("⚠️ Автовыдача НЕ РАБОТАЕТ! Бот работает только с уведомлениями.")
+            log.warning("⚠️ Автовыдача НЕ РАБОТАЕТ!")
     else:
         log.warning("⚠️ STRING_SESSION не найдена! Автовыдача НЕ РАБОТАЕТ!")
-        log.info("ℹ️ Бот будет работать в режиме уведомлений (админ выдает вручную)")
     
-    log.info("🤖 Бот запущен и работает в группе @ludkanihers!")
+    log.info("🤖 Бот запущен!")
     await dp.start_polling(bot)
 
 
